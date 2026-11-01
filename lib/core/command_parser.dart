@@ -28,6 +28,12 @@ class CommandParser {
   static final RegExp _openWords = _words(
     r'open|launch|start|go to|খোলো|খুলো|ওপেন|চালাও|খোল',
   );
+
+  /// Verbs that mean "open this app" when an app name is also present.
+  /// Includes common typos and romanised Bengali ("kholo", "koro").
+  static final RegExp _appVerbWords = _words(
+    r'open|opne|opn|launch|start|go to|run|khul|kholo|khulo|koro|করো|খোলো|খুলো|খুল|খোল|ওপেন|অপেন|চালাও|চালু|kholen',
+  );
   static final RegExp _minimizeWords = _words(
     r'minimize|minimise|background|going home|মিনিমাইজ|ব্যাকগ্রাউন্ড|ব্যাক',
   );
@@ -69,7 +75,7 @@ class CommandParser {
       return const DeviceAction(DeviceActionType.showOrb, 'Show floating Orb');
     }
 
-    if (_openWords.hasMatch(text)) {
+    if (_openWords.hasMatch(text) || _appVerbWords.hasMatch(text)) {
       // Try longest alias first so "google chrome" matches before "chrome".
       final candidates = <({LaunchApp app, String alias})>[];
       for (final app in kLaunchApps) {

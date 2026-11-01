@@ -108,7 +108,11 @@ class MainActivity : FlutterActivity() {
                             result.success(false)
                             return@setMethodCallHandler
                         }
-                        val intent = packageManager.getLaunchIntentForPackage(pkg)
+                        val intent = pkg.split(",")
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+                            .mapNotNull { packageManager.getLaunchIntentForPackage(it) }
+                            .firstOrNull()
                         if (intent == null) {
                             result.success(false)
                         } else {
@@ -125,8 +129,10 @@ class MainActivity : FlutterActivity() {
                     "isAppInstalled" -> {
                         val pkg = call.argument<String>("packageName") ?: ""
                         result.success(
-                            pkg.isNotBlank() &&
-                                packageManager.getLaunchIntentForPackage(pkg) != null
+                            pkg.split(",").any { p ->
+                                p.trim().isNotEmpty() &&
+                                    packageManager.getLaunchIntentForPackage(p.trim()) != null
+                            }
                         )
                     }
 

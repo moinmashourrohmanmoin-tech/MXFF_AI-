@@ -29,9 +29,9 @@ class LaunchApp {
 
 const kLaunchApps = <LaunchApp>[
   LaunchApp('com.zhiliaoapp.musically', 'TikTok', Icons.music_note,
-      ['tiktok', 'টিকটক', 'টিক টক']),
+      ['tiktok', 'tik tok', 'টিকটক', 'টিক টক']),
   LaunchApp('com.google.android.youtube', 'YouTube', Icons.play_circle_fill,
-      ['youtube', 'ইউটিউব', 'ইউ টিউব']),
+      ['youtube', 'you tube', 'ইউটিউব', 'ইউ টিউব']),
   LaunchApp('com.android.chrome', 'Chrome', Icons.public,
       ['chrome', 'ক্রোম', 'গুগল ক্রোম']),
   LaunchApp('com.facebook.katana', 'Facebook', Icons.facebook,
@@ -40,6 +40,10 @@ const kLaunchApps = <LaunchApp>[
       ['instagram', 'ইনস্টাগ্রাম', 'ইনস্টা']),
   LaunchApp('com.whatsapp', 'WhatsApp', Icons.chat,
       ['whatsapp', 'হোয়াটসঅ্যাপ', 'হোয়াটস অ্যাপ']),
+  // Messages: Google Messages first, Samsung Messages second (first installed wins).
+  LaunchApp('com.google.android.apps.messaging,com.samsung.android.messaging',
+      'Messages', Icons.sms,
+      ['messages', 'message', 'sms', 'এসএমএস', 'এস এম এস', 'এমএস', 'এম এস', 'মেসেজ', 'মেসেজেস']),
   LaunchApp('com.google.android.gm', 'Gmail', Icons.mail,
       ['gmail', 'জিমেইল', 'মেইল']),
   LaunchApp('com.google.android.apps.maps', 'Maps', Icons.map,
@@ -72,6 +76,9 @@ const kDefaultSystemInstruction =
     'user\'s Android phone. Reply in the same language the user writes in '
     '(Bengali or English). Keep spoken-style answers reasonably short and clear '
     'because your answers may be read aloud. Never claim to control devices '
-    'beyond what MXFF AI actually supports.';
+    'beyond what MXFF AI actually supports. MXFF AI can open installed apps itself '
+    'when the user says things like "open TikTok" or "টিকটক খোলো", so if a user asks '
+    'you to open an app in chat, briefly tell them to say "open <app name>" or '
+    '"<app name> খোলো" in the message box.';
 
 const kSleepMessage = 'MXFF AI slept. Open the app and press START to wake me.';
