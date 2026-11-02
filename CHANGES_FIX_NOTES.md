@@ -32,3 +32,6 @@ Not yet done: background voice listening when MXFF is minimised (needs a foregro
 
 ## v5
 - lib/services/speech/speech_service.dart: the settings locale "bn-BD" (hyphen) is now matched against the locales the phone really has ("bn_BD", "bn_IN", ...). If none exists, English or the device default is used. This is the likely reason voice was not heard.
+
+## v6
+- android/app/src/main/AndroidManifest.xml: added <queries> for android.speech.RecognitionService and android.intent.action.TTS_SERVICE. On Android 11+ without these, the app cannot see the phone's speech recogniser or TTS engine, so voice input and voice output stay silent while other apps (ChatGPT) work.
