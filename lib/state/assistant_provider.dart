@@ -162,7 +162,9 @@ class AssistantNotifier extends Notifier<AssistantState> {
   String _lastPartial = '';
   bool _voiceSent = false;
   Timer? _voiceFlushTimer;
+  Timer? _voiceHardTimeout;
   String _lastEngineEvent = '';
+  int _voiceSession = 0;
 
   GeminiLiveService? _live;
   String _liveUserBuf = '';
@@ -260,75 +262,103 @@ class AssistantNotifier extends Notifier<AssistantState> {
     // Reset capture state for this utterance.
     _lastPartial = '';
     _voiceSent = false;
-    _lastEngineEvent = '';
+    _lastEngineEvent = 'starting';
+    _voiceSession++;
+    final session = _voiceSession;
     _voiceFlushTimer?.cancel();
+    _voiceHardTimeout?.cancel();
 
     // Callbacks must be set BEFORE listening starts.
     speech.onResult = (text, finalResult) {
       debugPrint('MXFF voice result final=$finalResult text=$text');
-      if (_voiceSent) return;
+      if (session != _voiceSession || _voiceSent) return;
       final t = text.trim();
       if (t.isNotEmpty) _lastPartial = t;
       if (finalResult) {
-        _sendVoice();
+        unawaited(_sendVoice());
         return;
       }
       // Some Android devices never deliver a final result. If speech pauses
       // for a moment, send the last recognised text ourselves.
       _voiceFlushTimer?.cancel();
       _voiceFlushTimer =
-          Timer(const Duration(milliseconds: 1500), () => _sendVoice());
+          Timer(const Duration(milliseconds: 1500), () => unawaited(_sendVoice()));
     };
     speech.onStatusChange = (status) {
+      if (session != _voiceSession || _voiceSent) return;
       _lastEngineEvent = 'status:$status';
+      debugPrint('MXFF voice status: $status');
+      if (status == 'listening') {
+        _setStatus(AssistantStatus.listening, 'Listening… এখন বলুন…');
+      }
       if (status == 'done' || status == 'notListening') {
         // Allow Android speech recognition to deliver its final transcript.
         _voiceFlushTimer?.cancel();
         _voiceFlushTimer = Timer(
           const Duration(milliseconds: 900),
-          () => _sendVoice(),
+          () => unawaited(_sendVoice()),
         );
       }
     };
     speech.onErrorChange = (msg) {
+      if (session != _voiceSession || _voiceSent) return;
       debugPrint('MXFF voice error: $msg');
       _lastEngineEvent = 'error:$msg';
       if (state.status != AssistantStatus.listening) return;
       if (_lastPartial.isNotEmpty) {
-        _sendVoice();
+        unawaited(_sendVoice());
         return;
       }
       _voiceFlushTimer?.cancel();
-      _setStatus(AssistantStatus.idle, _voiceErrorText(msg));
+      _setStatus(AssistantStatus.error, _voiceErrorText(msg));
     };
 
-    _setStatus(AssistantStatus.listening, 'Listening… এখন বলুন…');
+    _setStatus(AssistantStatus.listening, 'মাইক্রোফোন চালু হচ্ছে…');
+    // A recognizer can silently fail to emit callbacks on some Android builds.
+    // End the session deterministically instead of leaving the UI stuck.
+    _voiceHardTimeout = Timer(const Duration(seconds: 18), () {
+      if (session != _voiceSession || _voiceSent ||
+          state.status != AssistantStatus.listening) return;
+      _lastEngineEvent = 'timeout_no_callback';
+      if (_lastPartial.trim().isNotEmpty) {
+        unawaited(_sendVoice());
+      } else {
+        _voiceSent = true;
+        unawaited(speech.stop());
+        _setStatus(AssistantStatus.error,
+            'মাইক্রোফোন চালু ছিল, কিন্তু Speech Recognition কোনো কথা শনাক্ত করেনি। Google Speech Services/ভাষা সেটিংস পরীক্ষা করুন।');
+      }
+    });
     try {
       await speech.listenOnce(locale: settings.speechLocale);
+      if (session == _voiceSession && state.status == AssistantStatus.listening) {
+        _setStatus(AssistantStatus.listening, 'Listening… এখন বলুন…');
+      }
     } catch (e) {
       debugPrint('MXFF listenOnce failed: $e');
+      _voiceHardTimeout?.cancel();
       _setStatus(AssistantStatus.error,
-          'এই ডিভাইসে স্পিচ রিকগনিশন পাওয়া যাচ্ছে না।');
+          'Speech Recognition চালু করা যায়নি: ${e.toString()}');
     }
   }
 
   /// Sends the captured voice text exactly once.
-  void _sendVoice() {
+  Future<void> _sendVoice() async {
     _voiceFlushTimer?.cancel();
+    _voiceHardTimeout?.cancel();
     if (_voiceSent) return;
     if (state.status != AssistantStatus.listening) return;
     final text = _lastPartial.trim();
     _voiceSent = true;
-    ref.read(speechServiceProvider).stop();
+    await ref.read(speechServiceProvider).stop();
     if (text.isEmpty) {
       final loc = ref.read(speechServiceProvider).activeLocale;
-      _setStatus(AssistantStatus.idle,
-          'কিছু শোনা যায়নি। (locale: $loc, event: $_lastEngineEvent)');
+      _setStatus(AssistantStatus.error,
+          'কথা শনাক্ত হয়নি (ভাষা: $loc, ঘটনা: $_lastEngineEvent)। আবার চেষ্টা করুন।');
       return;
     }
     debugPrint('MXFF sending voice text: $text');
-    _setStatus(AssistantStatus.idle, 'Ready');
-    send(text);
+    await send(text);
   }
 
   String _voiceErrorText(String msg) {
@@ -349,7 +379,9 @@ class AssistantNotifier extends Notifier<AssistantState> {
   }
 
   Future<void> stopListening() async {
+    _voiceSession++;
     _voiceFlushTimer?.cancel();
+    _voiceHardTimeout?.cancel();
     await ref.read(speechServiceProvider).stop();
     if (state.status == AssistantStatus.listening) {
       _setStatus(AssistantStatus.idle, 'Ready');
