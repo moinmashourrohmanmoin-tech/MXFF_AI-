@@ -55,3 +55,6 @@ Speech-to-text path is kept, and can be used by setting kUseGeminiLive = false.
 
 ## v10 - Live diagnostics
 - The Live status line shows how many mic packets were sent and what Gemini sends back (e.g. "শুনেছি: ...").
+
+## v11 - mic level diagnostics
+- Live status shows packet count and the loudest sample (শব্দের মাত্রা) of the last 50 packets. Near 0 means the mic is silent.

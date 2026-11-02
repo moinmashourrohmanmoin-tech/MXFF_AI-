@@ -46,6 +46,7 @@ class GeminiLiveService {
   bool _running = false;
   bool _micStarted = false;
   int _micPackets = 0;
+  int _peak = 0;
   int _serverMessages = 0;
 
   Future<void> start() async {
@@ -146,6 +147,18 @@ class GeminiLiveService {
     if (c['turnComplete'] == true) onTurnComplete();
   }
 
+  /// Largest absolute 16-bit sample in a PCM chunk (silence is near 0).
+  int _peakOf(Uint8List b) {
+    int peak = 0;
+    for (int i = 0; i + 1 < b.length; i += 2) {
+      int v = b[i] | (b[i + 1] << 8);
+      if (v >= 32768) v -= 65536;
+      if (v < 0) v = -v;
+      if (v > peak) peak = v;
+    }
+    return peak;
+  }
+
   /// Mic audio comes from the native AudioRecord (MainActivity.kt, channel
   /// "com.mxff.ai/mic") as 16 kHz 16-bit mono PCM chunks.
   void _startMic() {
@@ -156,8 +169,11 @@ class GeminiLiveService {
         final ws = _ws;
         if (ws == null || !_running || data is! Uint8List) return;
         _micPackets++;
+        final p = _peakOf(data);
+        if (p > _peak) _peak = p;
         if (_micPackets == 1 || _micPackets % 50 == 0) {
-          onStatus('মাইক সক্রিয় • পাঠানো হয়েছে: $_micPackets প্যাকেট');
+          onStatus('মাইক সক্রিয় • প্যাকেট: $_micPackets • শব্দের মাত্রা: $_peak');
+          _peak = 0;
         }
         try {
           ws.sink.add(jsonEncode({
