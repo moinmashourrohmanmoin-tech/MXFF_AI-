@@ -45,6 +45,8 @@ class GeminiLiveService {
   StreamSubscription<dynamic>? _micSub;
   bool _running = false;
   bool _micStarted = false;
+  int _micPackets = 0;
+  int _serverMessages = 0;
 
   Future<void> start() async {
     _running = true;
@@ -109,8 +111,12 @@ class GeminiLiveService {
       return;
     }
 
+    _serverMessages++;
     final c = m['serverContent'] as Map<String, dynamic>?;
-    if (c == null) return;
+    if (c == null) {
+      onStatus('Gemini বার্তা: ${m.keys.join(', ')}');
+      return;
+    }
 
     if (c['interrupted'] == true) {
       _pcm.invokeMethod<void>('flush').catchError((_) {});
@@ -118,7 +124,10 @@ class GeminiLiveService {
 
     final inT = c['inputTranscription'] as Map<String, dynamic>?;
     final inText = inT?['text'];
-    if (inText is String && inText.isNotEmpty) onUserText(inText);
+    if (inText is String && inText.isNotEmpty) {
+      onUserText(inText);
+      onStatus('শুনেছি: $inText');
+    }
 
     final outT = c['outputTranscription'] as Map<String, dynamic>?;
     final outText = outT?['text'];
@@ -146,6 +155,10 @@ class GeminiLiveService {
       (dynamic data) {
         final ws = _ws;
         if (ws == null || !_running || data is! Uint8List) return;
+        _micPackets++;
+        if (_micPackets == 1 || _micPackets % 50 == 0) {
+          onStatus('মাইক সক্রিয় • পাঠানো হয়েছে: $_micPackets প্যাকেট');
+        }
         try {
           ws.sink.add(jsonEncode({
             'realtimeInput': {

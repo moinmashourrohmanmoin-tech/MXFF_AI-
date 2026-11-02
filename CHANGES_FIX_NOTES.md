@@ -52,3 +52,6 @@ Speech-to-text path is kept, and can be used by setting kUseGeminiLive = false.
 - Removed the "record" package (its Linux platform code did not compile against the other packages).
 - Mic audio now comes from a native AudioRecord stream in MainActivity.kt (EventChannel "com.mxff.ai/mic"), 16 kHz mono PCM, using VOICE_COMMUNICATION (includes echo cancellation).
 - Microphone permission is requested before Live starts.
+
+## v10 - Live diagnostics
+- The Live status line shows how many mic packets were sent and what Gemini sends back (e.g. "শুনেছি: ...").
