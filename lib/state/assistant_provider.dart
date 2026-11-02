@@ -180,6 +180,13 @@ class AssistantNotifier extends Notifier<AssistantState> {
       _setStatus(AssistantStatus.error, 'প্রথমে Settings-এ Gemini API key দিন।');
       return;
     }
+    final mic = await ref.read(permissionServiceProvider).requestMicrophone();
+    if (mic != true) {
+      _setStatus(AssistantStatus.error, mic == null
+          ? 'মাইক্রোফোন অনুমতি বন্ধ। App settings থেকে চালু করুন।'
+          : 'ভয়েসের জন্য মাইক্রোফোন অনুমতি দরকার।');
+      return;
+    }
     if (state.status == AssistantStatus.speaking) {
       await stopSpeaking();
     }

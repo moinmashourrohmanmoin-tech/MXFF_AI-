@@ -47,3 +47,8 @@ Not yet done: background voice listening when MXFF is minimised (needs a foregro
 - pubspec.yaml: record, web_socket_channel added.
 - lib/core/constants.dart: kUseGeminiLive, kLiveModel, kLiveVoice.
 Speech-to-text path is kept, and can be used by setting kUseGeminiLive = false.
+
+## v9 - build fix for Gemini Live
+- Removed the "record" package (its Linux platform code did not compile against the other packages).
+- Mic audio now comes from a native AudioRecord stream in MainActivity.kt (EventChannel "com.mxff.ai/mic"), 16 kHz mono PCM, using VOICE_COMMUNICATION (includes echo cancellation).
+- Microphone permission is requested before Live starts.

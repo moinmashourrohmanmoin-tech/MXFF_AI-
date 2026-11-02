@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
-import 'package:record/record.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 /// Gemini Live (BidiGenerateContent) voice session.
@@ -40,21 +39,16 @@ class GeminiLiveService {
   final void Function(String error) onError;
 
   static const MethodChannel _pcm = MethodChannel('com.mxff.ai/pcm');
+  static const EventChannel _mic = EventChannel('com.mxff.ai/mic');
 
-  final AudioRecorder _rec = AudioRecorder();
   WebSocketChannel? _ws;
-  StreamSubscription<Uint8List>? _micSub;
+  StreamSubscription<dynamic>? _micSub;
   bool _running = false;
   bool _micStarted = false;
 
   Future<void> start() async {
     _running = true;
     onStatus('মাইক্রোফোন চালু হচ্ছে…');
-    if (!await _rec.hasPermission()) {
-      _running = false;
-      onError('মাইক্রোফোন অনুমতি নেই।');
-      return;
-    }
     await _pcm.invokeMethod<void>('start', {'rate': 24000});
 
     onStatus('Gemini Live সংযোগ হচ্ছে…');
@@ -143,42 +137,36 @@ class GeminiLiveService {
     if (c['turnComplete'] == true) onTurnComplete();
   }
 
-  Future<void> _startMic() async {
+  /// Mic audio comes from the native AudioRecord (MainActivity.kt, channel
+  /// "com.mxff.ai/mic") as 16 kHz 16-bit mono PCM chunks.
+  void _startMic() {
     if (_micStarted || !_running) return;
     _micStarted = true;
-    try {
-      final stream = await _rec.startStream(const RecordConfig(
-        encoder: AudioEncoder.pcm16bits,
-        sampleRate: 16000,
-        numChannels: 1,
-      ));
-      _micSub = stream.listen((chunk) {
+    _micSub = _mic.receiveBroadcastStream().listen(
+      (dynamic data) {
         final ws = _ws;
-        if (ws == null || !_running) return;
+        if (ws == null || !_running || data is! Uint8List) return;
         try {
           ws.sink.add(jsonEncode({
             'realtimeInput': {
               'audio': {
                 'mimeType': 'audio/pcm;rate=16000',
-                'data': base64Encode(chunk),
+                'data': base64Encode(data),
               },
             },
           }));
         } catch (_) {}
-      });
-    } catch (e) {
-      _micStarted = false;
-      onError('মাইক চালু করা যাচ্ছে না: $e');
-    }
+      },
+      onError: (Object e) {
+        onError('মাইক্রোফোন সমস্যা: $e');
+      },
+    );
   }
 
   Future<void> stop() async {
     _running = false;
     await _micSub?.cancel();
     _micSub = null;
-    try {
-      await _rec.stop();
-    } catch (_) {}
     _micStarted = false;
     try {
       await _ws?.sink.close();
@@ -191,6 +179,5 @@ class GeminiLiveService {
 
   Future<void> dispose() async {
     await stop();
-    await _rec.dispose();
   }
 }

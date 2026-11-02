@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
@@ -86,6 +87,75 @@ class MainActivity : FlutterActivity() {
             }
     }
 
+    private var micRecord: android.media.AudioRecord? = null
+    @Volatile private var micRunning = false
+    private val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+
+    /// Streams microphone audio (16 kHz, 16-bit mono PCM) to Flutter.
+    private fun setupMicChannel(engine: FlutterEngine) {
+        EventChannel(engine.dartExecutor.binaryMessenger, "com.mxff.ai/mic")
+            .setStreamHandler(object : EventChannel.StreamHandler {
+                override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+                    startMic(events)
+                }
+
+                override fun onCancel(arguments: Any?) {
+                    stopMic()
+                }
+            })
+    }
+
+    private fun startMic(events: EventChannel.EventSink) {
+        stopMic()
+        val rate = 16000
+        val minBuf = android.media.AudioRecord.getMinBufferSize(
+            rate,
+            android.media.AudioFormat.CHANNEL_IN_MONO,
+            android.media.AudioFormat.ENCODING_PCM_16BIT
+        )
+        val bufSize = maxOf(minBuf, 3200)
+        val rec = android.media.AudioRecord(
+            android.media.MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+            rate,
+            android.media.AudioFormat.CHANNEL_IN_MONO,
+            android.media.AudioFormat.ENCODING_PCM_16BIT,
+            bufSize
+        )
+        if (rec.state != android.media.AudioRecord.STATE_INITIALIZED) {
+            rec.release()
+            mainHandler.post { events.error("mic", "Microphone could not start", null) }
+            return
+        }
+        micRecord = rec
+        micRunning = true
+        rec.startRecording()
+        Thread {
+            val buf = ByteArray(bufSize)
+            while (micRunning) {
+                val n = rec.read(buf, 0, buf.size)
+                if (n > 0) {
+                    val chunk = buf.copyOf(n)
+                    mainHandler.post {
+                        if (micRunning) events.success(chunk)
+                    }
+                }
+            }
+        }.start()
+    }
+
+    private fun stopMic() {
+        micRunning = false
+        val rec = micRecord
+        micRecord = null
+        if (rec != null) {
+            try {
+                rec.stop()
+            } catch (_: Exception) {
+            }
+            rec.release()
+        }
+    }
+
     private fun startTrack(rate: Int) {
         stopTrack()
         val minBuf = android.media.AudioTrack.getMinBufferSize(
@@ -129,6 +199,7 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(engine: FlutterEngine) {
         super.configureFlutterEngine(engine)
         setupPcmChannel(engine)
+        setupMicChannel(engine)
         MethodChannel(engine.dartExecutor.binaryMessenger, "com.mxff.ai/bridge")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
