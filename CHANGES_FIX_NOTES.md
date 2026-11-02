@@ -29,3 +29,6 @@ Not yet done: background voice listening when MXFF is minimised (needs a foregro
 - lib/core/constants.dart: Messages app added (Google Messages + Samsung Messages). More aliases for TikTok and YouTube. System prompt no longer tells the user the app cannot open apps.
 - MainActivity.kt: openApp and isAppInstalled accept several package names separated by commas.
 - .github/workflows/build-apk.yml: APK build workflow included.
+
+## v5
+- lib/services/speech/speech_service.dart: the settings locale "bn-BD" (hyphen) is now matched against the locales the phone really has ("bn_BD", "bn_IN", ...). If none exists, English or the device default is used. This is the likely reason voice was not heard.

@@ -64,12 +64,41 @@ class SpeechService {
     onResult?.call(r.recognizedWords, r.finalResult);
   }
 
+  /// Picks a locale the device's recogniser really supports.
+  /// Android expects ids like "bn_BD" (underscore); settings may hold "bn-BD".
+  /// Falls back to any Bengali locale, then English, then the device default.
+  Future<String> _resolveLocale(String wanted) async {
+    if (wanted.isEmpty) return '';
+    try {
+      final locales = await _speech.locales();
+      String norm(String x) => x.replaceAll('-', '_').toLowerCase();
+      final names = locales.map((l) => l.localeId).toList();
+      debugPrint('MXFF available speech locales: ${names.join(', ')}');
+      final want = norm(wanted);
+      for (final id in names) {
+        if (norm(id) == want) return id;
+      }
+      final prefix = want.split('_').first;
+      for (final id in names) {
+        if (norm(id).startsWith('${prefix}_')) return id;
+      }
+      for (final id in names) {
+        if (norm(id) == 'en_us') return id;
+      }
+    } catch (e) {
+      debugPrint('MXFF locale lookup failed: $e');
+    }
+    return '';
+  }
+
   /// One-shot listen. Returns recognized text via [onResult].
   Future<void> listenOnce({required String locale}) async {
     _continuous = false;
     if (!await init()) {
       throw Exception('speech_unavailable');
     }
+    locale = await _resolveLocale(locale);
+    debugPrint('MXFF listening with locale: ${locale.isEmpty ? 'device default' : locale}');
     _locale = locale;
     await _speech.listen(
       onResult: _onResult,
@@ -86,6 +115,7 @@ class SpeechService {
   /// Continuous listening loop (app must remain in the foreground).
   Future<void> startContinuous({required String locale}) async {
     if (!await init()) throw Exception('speech_unavailable');
+    locale = await _resolveLocale(locale);
     _locale = locale;
     _continuous = true;
     await _speech.listen(
