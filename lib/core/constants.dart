@@ -85,6 +85,6 @@ const kSleepMessage = 'MXFF AI slept. Open the app and press START to wake me.';
 
 /// Gemini Live voice (streams audio to Gemini, like ChatGPT voice mode).
 /// When true, the mic button uses Live instead of the phone's speech recogniser.
-const bool kUseGeminiLive = true;
+const bool kUseGeminiLive = false;
 const String kLiveModel = 'gemini-2.5-flash-native-audio-preview-09-2025';
 const String kLiveVoice = 'Aoede';

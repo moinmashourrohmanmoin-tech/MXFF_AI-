@@ -281,7 +281,14 @@ class AssistantNotifier extends Notifier<AssistantState> {
     };
     speech.onStatusChange = (status) {
       _lastEngineEvent = 'status:$status';
-      if (status == 'done' || status == 'notListening') _sendVoice();
+      if (status == 'done' || status == 'notListening') {
+        // Allow Android speech recognition to deliver its final transcript.
+        _voiceFlushTimer?.cancel();
+        _voiceFlushTimer = Timer(
+          const Duration(milliseconds: 900),
+          () => _sendVoice(),
+        );
+      }
     };
     speech.onErrorChange = (msg) {
       debugPrint('MXFF voice error: $msg');
