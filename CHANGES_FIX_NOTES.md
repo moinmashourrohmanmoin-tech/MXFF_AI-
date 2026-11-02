@@ -39,3 +39,11 @@ Not yet done: background voice listening when MXFF is minimised (needs a foregro
 ## v7
 - speech_service.dart: one-shot listening uses ListenMode.dictation (the normal free-speech mode), and exposes the locale in use.
 - assistant_provider.dart: when no speech is captured, the status line shows the locale and the last engine event, so the cause is visible on screen.
+
+## v8 - Gemini Live voice
+- lib/services/live/gemini_live_service.dart: streams mic audio (16 kHz PCM) to Gemini Live over WebSocket and plays Gemini's spoken reply. Does not use the phone's speech recogniser.
+- lib/state/assistant_provider.dart: mic button starts/stops Live (toggleLive/stopLive). Transcripts are added to chat on each turn.
+- android MainActivity.kt: native AudioTrack player on channel com.mxff.ai/pcm.
+- pubspec.yaml: record, web_socket_channel added.
+- lib/core/constants.dart: kUseGeminiLive, kLiveModel, kLiveVoice.
+Speech-to-text path is kept, and can be used by setting kUseGeminiLive = false.

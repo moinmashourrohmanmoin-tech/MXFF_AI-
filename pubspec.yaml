@@ -11,6 +11,8 @@ dependencies:
     sdk: flutter
   http: ^1.2.2
   speech_to_text: ^7.0.0
+  record: ^5.1.2
+  web_socket_channel: ^3.0.0
   flutter_tts: ^4.2.0
   flutter_riverpod: ^2.6.1
   shared_preferences: ^2.3.2

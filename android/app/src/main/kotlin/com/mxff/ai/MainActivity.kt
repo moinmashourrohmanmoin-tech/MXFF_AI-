@@ -47,8 +47,88 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private var audioTrack: android.media.AudioTrack? = null
+    private val pcmExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    /// Plays Gemini Live's 24 kHz 16-bit mono PCM replies.
+    private fun setupPcmChannel(engine: FlutterEngine) {
+        MethodChannel(engine.dartExecutor.binaryMessenger, "com.mxff.ai/pcm")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "start" -> {
+                        val rate = call.argument<Int>("rate") ?: 24000
+                        pcmExecutor.execute { startTrack(rate) }
+                        result.success(null)
+                    }
+                    "write" -> {
+                        val data = call.argument<ByteArray>("data")
+                        if (data != null) {
+                            pcmExecutor.execute { audioTrack?.write(data, 0, data.size) }
+                        }
+                        result.success(null)
+                    }
+                    "flush" -> {
+                        pcmExecutor.execute {
+                            audioTrack?.let {
+                                it.pause()
+                                it.flush()
+                                it.play()
+                            }
+                        }
+                        result.success(null)
+                    }
+                    "stop" -> {
+                        pcmExecutor.execute { stopTrack() }
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    private fun startTrack(rate: Int) {
+        stopTrack()
+        val minBuf = android.media.AudioTrack.getMinBufferSize(
+            rate,
+            android.media.AudioFormat.CHANNEL_OUT_MONO,
+            android.media.AudioFormat.ENCODING_PCM_16BIT
+        )
+        val track = android.media.AudioTrack.Builder()
+            .setAudioAttributes(
+                android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            .setAudioFormat(
+                android.media.AudioFormat.Builder()
+                    .setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(rate)
+                    .setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+            )
+            .setBufferSizeInBytes(minBuf * 4)
+            .setTransferMode(android.media.AudioTrack.MODE_STREAM)
+            .build()
+        track.play()
+        audioTrack = track
+    }
+
+    private fun stopTrack() {
+        val t = audioTrack
+        audioTrack = null
+        if (t != null) {
+            try {
+                t.stop()
+            } catch (_: Exception) {
+            }
+            t.release()
+        }
+    }
+
     override fun configureFlutterEngine(engine: FlutterEngine) {
         super.configureFlutterEngine(engine)
+        setupPcmChannel(engine)
         MethodChannel(engine.dartExecutor.binaryMessenger, "com.mxff.ai/bridge")
             .setMethodCallHandler { call, result ->
                 when (call.method) {

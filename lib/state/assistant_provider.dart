@@ -7,6 +7,7 @@ import '../core/command_parser.dart';
 import '../core/constants.dart';
 import '../core/exceptions.dart';
 import '../data/models/chat_message.dart';
+import '../services/live/gemini_live_service.dart';
 import 'providers.dart';
 
 enum AssistantStatus { idle, listening, thinking, speaking, error, sleeping }
@@ -163,7 +164,71 @@ class AssistantNotifier extends Notifier<AssistantState> {
   Timer? _voiceFlushTimer;
   String _lastEngineEvent = '';
 
+  GeminiLiveService? _live;
+  String _liveUserBuf = '';
+  String _liveModelBuf = '';
+
+  /// Starts or stops a Gemini Live voice session.
+  Future<void> toggleLive() async {
+    if (_live != null) {
+      await stopLive();
+      return;
+    }
+    final settings = ref.read(settingsProvider);
+    final key = settings.geminiApiKey.trim();
+    if (key.isEmpty) {
+      _setStatus(AssistantStatus.error, 'প্রথমে Settings-এ Gemini API key দিন।');
+      return;
+    }
+    if (state.status == AssistantStatus.speaking) {
+      await stopSpeaking();
+    }
+    _liveUserBuf = '';
+    _liveModelBuf = '';
+    final live = GeminiLiveService(
+      apiKey: key,
+      model: kLiveModel,
+      voice: kLiveVoice,
+      systemInstruction: settings.systemInstruction,
+      onStatus: (s) => _setStatus(AssistantStatus.listening, s),
+      onUserText: (t) => _liveUserBuf += t,
+      onAssistantText: (t) => _liveModelBuf += t,
+      onTurnComplete: _flushLiveTurn,
+      onError: (e) {
+        debugPrint('MXFF live error: $e');
+        _setStatus(AssistantStatus.error, e);
+        stopLive();
+      },
+    );
+    _live = live;
+    _setStatus(AssistantStatus.listening, 'Live চালু হচ্ছে…');
+    await live.start();
+  }
+
+  void _flushLiveTurn() {
+    final u = _liveUserBuf.trim();
+    final m = _liveModelBuf.trim();
+    if (u.isNotEmpty) _chat.addUserMessage(u);
+    if (m.isNotEmpty) _chat.addModelMessage(m);
+    _liveUserBuf = '';
+    _liveModelBuf = '';
+  }
+
+  Future<void> stopLive() async {
+    final live = _live;
+    _live = null;
+    if (live != null) {
+      _flushLiveTurn();
+      await live.stop();
+    }
+    _setStatus(AssistantStatus.idle, 'Ready');
+  }
+
   Future<void> toggleMic() async {
+    if (kUseGeminiLive) {
+      await toggleLive();
+      return;
+    }
     if (state.status == AssistantStatus.listening) {
       await stopListening();
       return;
