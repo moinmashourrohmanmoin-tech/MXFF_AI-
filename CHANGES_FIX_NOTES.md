@@ -35,3 +35,7 @@ Not yet done: background voice listening when MXFF is minimised (needs a foregro
 
 ## v6
 - android/app/src/main/AndroidManifest.xml: added <queries> for android.speech.RecognitionService and android.intent.action.TTS_SERVICE. On Android 11+ without these, the app cannot see the phone's speech recogniser or TTS engine, so voice input and voice output stay silent while other apps (ChatGPT) work.
+
+## v7
+- speech_service.dart: one-shot listening uses ListenMode.dictation (the normal free-speech mode), and exposes the locale in use.
+- assistant_provider.dart: when no speech is captured, the status line shows the locale and the last engine event, so the cause is visible on screen.

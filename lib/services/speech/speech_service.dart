@@ -91,6 +91,9 @@ class SpeechService {
     return '';
   }
 
+  /// Locale actually used by the last listen (for on-screen diagnostics).
+  String get activeLocale => _locale.isEmpty ? 'device default' : _locale;
+
   /// One-shot listen. Returns recognized text via [onResult].
   Future<void> listenOnce({required String locale}) async {
     _continuous = false;
@@ -105,7 +108,7 @@ class SpeechService {
       listenOptions: SpeechListenOptions(
         cancelOnError: true,
         partialResults: true,
-        listenMode: ListenMode.confirmation,
+        listenMode: ListenMode.dictation,
         localeId: locale.isEmpty ? null : locale,
         listenFor: const Duration(seconds: 30),
       ),

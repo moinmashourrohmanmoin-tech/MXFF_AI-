@@ -161,6 +161,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
   String _lastPartial = '';
   bool _voiceSent = false;
   Timer? _voiceFlushTimer;
+  String _lastEngineEvent = '';
 
   Future<void> toggleMic() async {
     if (state.status == AssistantStatus.listening) {
@@ -187,6 +188,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
     // Reset capture state for this utterance.
     _lastPartial = '';
     _voiceSent = false;
+    _lastEngineEvent = '';
     _voiceFlushTimer?.cancel();
 
     // Callbacks must be set BEFORE listening starts.
@@ -206,10 +208,12 @@ class AssistantNotifier extends Notifier<AssistantState> {
           Timer(const Duration(milliseconds: 1500), () => _sendVoice());
     };
     speech.onStatusChange = (status) {
+      _lastEngineEvent = 'status:$status';
       if (status == 'done' || status == 'notListening') _sendVoice();
     };
     speech.onErrorChange = (msg) {
       debugPrint('MXFF voice error: $msg');
+      _lastEngineEvent = 'error:$msg';
       if (state.status != AssistantStatus.listening) return;
       if (_lastPartial.isNotEmpty) {
         _sendVoice();
@@ -238,7 +242,9 @@ class AssistantNotifier extends Notifier<AssistantState> {
     _voiceSent = true;
     ref.read(speechServiceProvider).stop();
     if (text.isEmpty) {
-      _setStatus(AssistantStatus.idle, 'কিছু শোনা যায়নি, আবার মাইক চাপুন।');
+      final loc = ref.read(speechServiceProvider).activeLocale;
+      _setStatus(AssistantStatus.idle,
+          'কিছু শোনা যায়নি। (locale: $loc, event: $_lastEngineEvent)');
       return;
     }
     debugPrint('MXFF sending voice text: $text');
