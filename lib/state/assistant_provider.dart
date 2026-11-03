@@ -7,6 +7,7 @@ import '../core/command_parser.dart';
 import '../core/constants.dart';
 import '../core/exceptions.dart';
 import '../data/models/chat_message.dart';
+import '../core/local_brain.dart';
 import '../services/live/gemini_live_service.dart';
 import 'providers.dart';
 
@@ -76,10 +77,47 @@ class AssistantNotifier extends Notifier<AssistantState> {
       return;
     }
 
-    // 2) Gemini conversation.
+    // 2) MXFF AI's own skills (time, date, calculator, name, notes, timer).
     _chat.addUserMessage(text);
     _chat.ensureActiveConversation(text);
+    final local = await _brain.answer(text);
+    if (local != null) {
+      _chat.addModelMessage(local.text);
+      if (local.timerSeconds != null) _startTimer(local.timerSeconds!);
+      await _speakLocal(local.text, speakAnswer);
+      return;
+    }
+
+    // 3) Unknown request: Gemini only if the fallback switch is on.
+    if (!kUseGeminiFallback) {
+      const msg =
+          'এটা এখন আমি নিজে করতে পারি না। আমি পারি: সময় ও তারিখ বলা, হিসাব, আপনার নাম মনে রাখা, নোট রাখা, টাইমার, আর অ্যাপ খোলা।';
+      _chat.addModelMessage(msg);
+      await _speakLocal(msg, speakAnswer);
+      return;
+    }
     await _askGemini(text, speakAnswer: speakAnswer);
+  }
+
+  Future<void> _speakLocal(String msg, bool speakAnswer) async {
+    _setStatus(AssistantStatus.speaking, 'Speaking…');
+    if (speakAnswer) {
+      await _configureTts();
+      await ref.read(ttsServiceProvider).speak(msg);
+    }
+    if (_alive && ref.read(assistantProvider).status == AssistantStatus.speaking) {
+      _setStatus(AssistantStatus.idle, 'Ready');
+    }
+    _syncOverlayStatus();
+  }
+
+  void _startTimer(int seconds) {
+    _timer?.cancel();
+    _timer = Timer(Duration(seconds: seconds), () {
+      const msg = 'টাইমার শেষ হয়েছে।';
+      _chat.addModelMessage(msg);
+      _speakLocal(msg, true);
+    });
   }
 
   Future<void> _askGemini(String prompt, {required bool speakAnswer}) async {
@@ -165,6 +203,8 @@ class AssistantNotifier extends Notifier<AssistantState> {
   String _lastEngineEvent = '';
 
   GeminiLiveService? _live;
+  final LocalBrain _brain = LocalBrain();
+  Timer? _timer;
   String _liveUserBuf = '';
   String _liveModelBuf = '';
 
