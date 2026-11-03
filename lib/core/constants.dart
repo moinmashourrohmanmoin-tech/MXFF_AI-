@@ -29,7 +29,7 @@ class LaunchApp {
 
 const kLaunchApps = <LaunchApp>[
   LaunchApp('com.zhiliaoapp.musically', 'TikTok', Icons.music_note,
-      ['tiktok', 'tik tok', 'টিকটক', 'টিক টক']),
+      ['tiktok', 'tik tok', 'tiktko', 'tik tok', 'tik-tok', 'টিকটক', 'টিক টক', 'টিকটক্']),
   LaunchApp('com.google.android.youtube', 'YouTube', Icons.play_circle_fill,
       ['youtube', 'you tube', 'ইউটিউব', 'ইউ টিউব']),
   LaunchApp('com.android.chrome', 'Chrome', Icons.public,

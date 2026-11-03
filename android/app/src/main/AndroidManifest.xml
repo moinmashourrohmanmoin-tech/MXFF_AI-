@@ -47,19 +47,6 @@
         </activity>
 
         <service
-            android:name="com.mxff.ai.MxffAccessibilityService"
-            android:label="MXFF AI App Control"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService"/>
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/mxff_accessibility_service"/>
-        </service>
-
-        <service
             android:name="com.mxff.ai.MxffOverlayService"
             android:exported="false"
             android:stopWithTask="false"/>

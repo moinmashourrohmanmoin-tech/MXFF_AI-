@@ -260,19 +260,6 @@ class _SettingsTabState extends ConsumerState<SettingsTab> {
           GlassPanel(
             child: Column(
               children: [
-                _tile('Accessibility App Control', Icons.accessibility_new_rounded, () async {
-                  await ref.read(androidBridgeProvider).openAccessibilitySettings();
-                }),
-                _tile('Refresh permission status', Icons.refresh_rounded, () async {
-                  final ok = await ref.read(androidBridgeProvider).hasAccessibilityEnabled();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(ok
-                        ? 'MXFF AI Accessibility চালু আছে'
-                        : 'Android Settings থেকে MXFF AI চালু করুন')),
-                    );
-                  }
-                }),
                 _tile('Microphone permission', Icons.mic_rounded, () async {
                   final p = ref.read(permissionServiceProvider);
                   if (await p.requestMicrophone() == null) {

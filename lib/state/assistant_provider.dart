@@ -68,24 +68,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
     if (state.status == AssistantStatus.sleeping) return;
     if (state.busy) return;
 
-    // 1) Bengali/English web-search commands.
-    final searchMatch = RegExp(r'^(?:সার্চ করো|খুঁজে দাও|খোঁজ করো|search)\s*(.*)$', caseSensitive: false).firstMatch(text);
-    final trailingSearch = RegExp(r'^(.+?)\s+(?:সার্চ করো|খুঁজে দাও|খোঁজ করো)$', caseSensitive: false).firstMatch(text);
-    final query = (searchMatch?.group(1) ?? trailingSearch?.group(1) ?? '').trim();
-    if (query.isNotEmpty) {
-      _chat.addUserMessage(text);
-      final ok = await ref.read(androidBridgeProvider).searchWeb(query);
-      final response = ok ? '“$query” সার্চ খুলেছি।' : 'সার্চ খোলা যায়নি।';
-      _chat.addModelMessage(response);
-      _setStatus(ok ? AssistantStatus.idle : AssistantStatus.error, response);
-      if (speakAnswer) { await _configureTts(); await ref.read(ttsServiceProvider).speak(response); }
-      return;
-    }
-
-    // 2) Native accessibility commands operate on the currently visible app.
-    if (await _handleAccessibilityCommand(text)) return;
-
-    // 3) Device commands (offline, rule-based).
+    // 1) Device commands (offline, rule-based).
     final action = CommandParser.parse(text);
     if (action != null) {
       _chat.addUserMessage(text);
@@ -97,73 +80,6 @@ class AssistantNotifier extends Notifier<AssistantState> {
     _chat.addUserMessage(text);
     _chat.ensureActiveConversation(text);
     await _askGemini(text, speakAnswer: speakAnswer);
-  }
-
-
-  Future<bool> _handleAccessibilityCommand(String raw) async {
-    final text = raw.trim();
-    final lower = text.toLowerCase().replaceAll(RegExp(r'[।,.!?]+$'), '').trim();
-    final bridge = ref.read(androidBridgeProvider);
-    String action = '';
-    String? target;
-    String? value;
-
-    bool hasAny(List<String> words) => words.any(lower.contains);
-
-    // Bengali-first commands. Accept natural variations, not only exact English.
-    if (hasAny(['অ্যাসিস্ট্যান্ট বন্ধ', 'সহকারী বন্ধ', 'ভয়েস বন্ধ', 'ভয়েস বন্ধ', 'শুনা বন্ধ', 'শোনা বন্ধ'])) {
-      await stopLive();
-      await stopListening();
-      await ref.read(speechServiceProvider).stop();
-      state = state.copyWith(listeningMode: false);
-      _setStatus(AssistantStatus.idle, 'অ্যাসিস্ট্যান্ট বন্ধ হয়েছে।');
-      return true;
-    }
-    if (hasAny(['আগের পেজে যাও', 'পিছনে যাও', 'পেছনে যাও', 'এক ধাপ পিছনে', 'ব্যাক করো', 'ব্যাক যাও']) ||
-        RegExp(r'^(go )?back$|^পিছনে যাও$', caseSensitive: false).hasMatch(lower)) action = 'back';
-    else if (hasAny(['হোমে যাও', 'হোম স্ক্রিনে যাও', 'মূল পর্দায় যাও', 'মূল পর্দায় যাও']) || lower == 'home') action = 'home';
-    else if (hasAny(['নিচে স্ক্রল', 'নিচে নামাও', 'আরও নিচে', 'নিচের দিকে যাও']) || lower == 'scroll down') action = 'scroll_down';
-    else if (hasAny(['উপরে স্ক্রল', 'উপরে উঠাও', 'উপরে যাও', 'উপরের দিকে যাও']) || lower == 'scroll up') action = 'scroll_up';
-    else if (hasAny(['নোটিফিকেশন দেখাও', 'নোটিফিকেশন খোলো', 'বিজ্ঞপ্তি দেখাও'])) action = 'notifications';
-    else {
-      final click = RegExp(r'^(?:click|tap)\s+(.+)$', caseSensitive: false).firstMatch(text)
-          ?? RegExp(r'^(?:চাপ দাও|ক্লিক করো|বাটনে চাপ দাও)\s*(.*)$').firstMatch(text);
-      if (click != null) {
-        action = 'click_text';
-        target = click.group(1)?.trim();
-      } else if (hasAny(['লাইক দাও', 'লাইক বাটনে চাপ দাও', 'লাইক করো'])) {
-        action = 'click_text'; target = 'Like';
-      } else if (hasAny(['কমেন্টে চাপ দাও', 'কমেন্ট করো'])) {
-        action = 'click_text'; target = 'Comment';
-      } else {
-        final type = RegExp(r'^(?:type|write|লিখো|লিখে দাও|টাইপ করো)\s+(.+)$', caseSensitive: false).firstMatch(text);
-        final sayType = RegExp(r'^(.+?)\s+লিখে দাও$').firstMatch(text);
-        if (type != null) {
-          action = 'type_text'; value = type.group(1)?.trim();
-        } else if (sayType != null) {
-          action = 'type_text'; value = sayType.group(1)?.trim();
-        }
-      }
-    }
-    if (action.isEmpty) return false;
-    try {
-      final result = await bridge.accessibilityAction(action, target: target, value: value);
-      final ok = result == true;
-      _chat.addUserMessage(text);
-      final response = ok
-          ? 'কাজটি সম্পন্ন করেছি।'
-          : 'এই স্ক্রিনে কাজটি করা যায়নি। Accessibility চালু আছে কি না এবং বাটন বা লেখার ঘরটি দৃশ্যমান কি না পরীক্ষা করুন।';
-      _chat.addModelMessage(response);
-      _setStatus(ok ? AssistantStatus.speaking : AssistantStatus.error, response);
-      if (ok) {
-        await _configureTts();
-        await ref.read(ttsServiceProvider).speak(response);
-        _setStatus(AssistantStatus.idle, 'প্রস্তুত');
-      }
-    } catch (_) {
-      _setStatus(AssistantStatus.error, 'ফোনের Accessibility অনুমতি চালু করুন।');
-    }
-    return true;
   }
 
   Future<void> _askGemini(String prompt, {required bool speakAnswer}) async {
@@ -246,9 +162,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
   String _lastPartial = '';
   bool _voiceSent = false;
   Timer? _voiceFlushTimer;
-  Timer? _voiceHardTimeout;
   String _lastEngineEvent = '';
-  int _voiceSession = 0;
 
   GeminiLiveService? _live;
   String _liveUserBuf = '';
@@ -346,103 +260,75 @@ class AssistantNotifier extends Notifier<AssistantState> {
     // Reset capture state for this utterance.
     _lastPartial = '';
     _voiceSent = false;
-    _lastEngineEvent = 'starting';
-    _voiceSession++;
-    final session = _voiceSession;
+    _lastEngineEvent = '';
     _voiceFlushTimer?.cancel();
-    _voiceHardTimeout?.cancel();
 
     // Callbacks must be set BEFORE listening starts.
     speech.onResult = (text, finalResult) {
       debugPrint('MXFF voice result final=$finalResult text=$text');
-      if (session != _voiceSession || _voiceSent) return;
+      if (_voiceSent) return;
       final t = text.trim();
       if (t.isNotEmpty) _lastPartial = t;
       if (finalResult) {
-        unawaited(_sendVoice());
+        _sendVoice();
         return;
       }
       // Some Android devices never deliver a final result. If speech pauses
       // for a moment, send the last recognised text ourselves.
       _voiceFlushTimer?.cancel();
       _voiceFlushTimer =
-          Timer(const Duration(milliseconds: 1500), () => unawaited(_sendVoice()));
+          Timer(const Duration(milliseconds: 1500), () => _sendVoice());
     };
     speech.onStatusChange = (status) {
-      if (session != _voiceSession || _voiceSent) return;
       _lastEngineEvent = 'status:$status';
-      debugPrint('MXFF voice status: $status');
-      if (status == 'listening') {
-        _setStatus(AssistantStatus.listening, 'Listening… এখন বলুন…');
-      }
       if (status == 'done' || status == 'notListening') {
         // Allow Android speech recognition to deliver its final transcript.
         _voiceFlushTimer?.cancel();
         _voiceFlushTimer = Timer(
           const Duration(milliseconds: 900),
-          () => unawaited(_sendVoice()),
+          () => _sendVoice(),
         );
       }
     };
     speech.onErrorChange = (msg) {
-      if (session != _voiceSession || _voiceSent) return;
       debugPrint('MXFF voice error: $msg');
       _lastEngineEvent = 'error:$msg';
       if (state.status != AssistantStatus.listening) return;
       if (_lastPartial.isNotEmpty) {
-        unawaited(_sendVoice());
+        _sendVoice();
         return;
       }
       _voiceFlushTimer?.cancel();
-      _setStatus(AssistantStatus.error, _voiceErrorText(msg));
+      _setStatus(AssistantStatus.idle, _voiceErrorText(msg));
     };
 
-    _setStatus(AssistantStatus.listening, 'মাইক্রোফোন চালু হচ্ছে…');
-    // A recognizer can silently fail to emit callbacks on some Android builds.
-    // End the session deterministically instead of leaving the UI stuck.
-    _voiceHardTimeout = Timer(const Duration(seconds: 18), () {
-      if (session != _voiceSession || _voiceSent ||
-          state.status != AssistantStatus.listening) return;
-      _lastEngineEvent = 'timeout_no_callback';
-      if (_lastPartial.trim().isNotEmpty) {
-        unawaited(_sendVoice());
-      } else {
-        _voiceSent = true;
-        unawaited(speech.stop());
-        _setStatus(AssistantStatus.error,
-            'মাইক্রোফোন চালু ছিল, কিন্তু Speech Recognition কোনো কথা শনাক্ত করেনি। Google Speech Services/ভাষা সেটিংস পরীক্ষা করুন।');
-      }
-    });
+    _setStatus(AssistantStatus.listening, 'Listening… এখন বলুন…');
     try {
       await speech.listenOnce(locale: settings.speechLocale);
-      if (session == _voiceSession && state.status == AssistantStatus.listening) {
-        _setStatus(AssistantStatus.listening, 'Listening… এখন বলুন…');
-      }
     } catch (e) {
       debugPrint('MXFF listenOnce failed: $e');
-      _voiceHardTimeout?.cancel();
       _setStatus(AssistantStatus.error,
-          'Speech Recognition চালু করা যায়নি: ${e.toString()}');
+          'এই ডিভাইসে স্পিচ রিকগনিশন পাওয়া যাচ্ছে না।');
     }
   }
 
   /// Sends the captured voice text exactly once.
-  Future<void> _sendVoice() async {
+  void _sendVoice() {
     _voiceFlushTimer?.cancel();
-    _voiceHardTimeout?.cancel();
     if (_voiceSent) return;
     if (state.status != AssistantStatus.listening) return;
     final text = _lastPartial.trim();
     _voiceSent = true;
-    await ref.read(speechServiceProvider).stop();
+    ref.read(speechServiceProvider).stop();
     if (text.isEmpty) {
       final loc = ref.read(speechServiceProvider).activeLocale;
-      _setStatus(AssistantStatus.error,
-          'কথা শনাক্ত হয়নি (ভাষা: $loc, ঘটনা: $_lastEngineEvent)। আবার চেষ্টা করুন।');
+      _setStatus(AssistantStatus.idle,
+          'কিছু শোনা যায়নি। (locale: $loc, event: $_lastEngineEvent)');
       return;
     }
     debugPrint('MXFF sending voice text: $text');
-    await send(text);
+    _setStatus(AssistantStatus.idle, 'Ready');
+    send(text);
   }
 
   String _voiceErrorText(String msg) {
@@ -463,9 +349,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
   }
 
   Future<void> stopListening() async {
-    _voiceSession++;
     _voiceFlushTimer?.cancel();
-    _voiceHardTimeout?.cancel();
     await ref.read(speechServiceProvider).stop();
     if (state.status == AssistantStatus.listening) {
       _setStatus(AssistantStatus.idle, 'Ready');

@@ -58,3 +58,9 @@ Speech-to-text path is kept, and can be used by setting kUseGeminiLive = false.
 
 ## v11 - mic level diagnostics
 - Live status shows packet count and the loudest sample (শব্দের মাত্রা) of the last 50 packets. Near 0 means the mic is silent.
+
+
+## TikTok command alias fix
+- Added the common speech-to-text typo `tiktko` as a TikTok alias, so phrases such as `Open TikTok` can still launch TikTok when transcription swaps the final letters.
+- Updated the assistant instruction to avoid asking users to retype supported app-launch commands.
+- This source change still needs a GitHub Actions build and real-device verification.

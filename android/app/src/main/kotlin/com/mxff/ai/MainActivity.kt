@@ -48,19 +48,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-
-    // When the user leaves MXFF AI for another app, show the small orb if
-    // overlay permission has already been granted.
-    override fun onUserLeaveHint() {
-        super.onUserLeaveHint()
-        if (canDrawOverlays()) {
-            try {
-                startService(Intent(this, MxffOverlayService::class.java)
-                    .putExtra("mode", "small").putExtra("status", ""))
-            } catch (_: Exception) { }
-        }
-    }
-
     private var audioTrack: android.media.AudioTrack? = null
     private val pcmExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
 
@@ -218,40 +205,6 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "hasOverlayPermission" -> result.success(canDrawOverlays())
 
-                    "hasAccessibilityEnabled" -> result.success(MxffAccessibilityService.isEnabled())
-
-                    "openAccessibilitySettings" -> {
-                        try {
-                            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                            result.success(true)
-                        } catch (e: Exception) {
-                            result.error("SETTINGS_FAILED", e.message, null)
-                        }
-                    }
-
-                    "accessibilityAction" -> {
-                        val svc = MxffAccessibilityService.instance
-                        if (svc == null) {
-                            result.error("ACCESSIBILITY_OFF", "Enable MXFF AI in Android Accessibility settings first", null)
-                        } else {
-                            val action = call.argument<String>("action") ?: ""
-                            val target = call.argument<String>("target")
-                            val value = call.argument<String>("value") ?: ""
-                            val ok = when (action) {
-                                "back", "home", "recents", "notifications" -> svc.global(action)
-                                "scroll_up", "scroll_down" -> svc.scroll(if (action == "scroll_up") "up" else "down")
-                                "click_text" -> !target.isNullOrBlank() && svc.clickText(target)
-                                "type_text" -> svc.setText(target, value)
-                                "visible_text" -> {
-                                    result.success(svc.visibleText())
-                                    return@setMethodCallHandler
-                                }
-                                else -> false
-                            }
-                            result.success(ok)
-                        }
-                    }
-
                     "requestOverlayPermission" -> {
                         if (!canDrawOverlays()) {
                             try {
@@ -332,28 +285,6 @@ class MainActivity : FlutterActivity() {
                                     packageManager.getLaunchIntentForPackage(p.trim()) != null
                             }
                         )
-                    }
-
-                    "searchWeb" -> {
-                        val query = call.argument<String>("query")?.trim().orEmpty()
-                        if (query.isBlank()) {
-                            result.success(false)
-                        } else {
-                            try {
-                                val search = Intent(Intent.ACTION_WEB_SEARCH).apply {
-                                    putExtra(android.app.SearchManager.QUERY, query)
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                startActivity(search)
-                                result.success(true)
-                            } catch (_: Exception) {
-                                try {
-                                    val uri = Uri.parse("https://www.google.com/search?q=" + Uri.encode(query))
-                                    startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                                    result.success(true)
-                                } catch (_: Exception) { result.success(false) }
-                            }
-                        }
                     }
 
                     "minimizeApp" -> {
