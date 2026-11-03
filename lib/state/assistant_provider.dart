@@ -68,7 +68,24 @@ class AssistantNotifier extends Notifier<AssistantState> {
     if (state.status == AssistantStatus.sleeping) return;
     if (state.busy) return;
 
-    // 1) Device commands (offline, rule-based).
+    // 1) Bengali/English web-search commands.
+    final searchMatch = RegExp(r'^(?:সার্চ করো|খুঁজে দাও|খোঁজ করো|search)\s*(.*)$', caseSensitive: false).firstMatch(text);
+    final trailingSearch = RegExp(r'^(.+?)\s+(?:সার্চ করো|খুঁজে দাও|খোঁজ করো)$', caseSensitive: false).firstMatch(text);
+    final query = (searchMatch?.group(1) ?? trailingSearch?.group(1) ?? '').trim();
+    if (query.isNotEmpty) {
+      _chat.addUserMessage(text);
+      final ok = await ref.read(androidBridgeProvider).searchWeb(query);
+      final response = ok ? '“$query” সার্চ খুলেছি।' : 'সার্চ খোলা যায়নি।';
+      _chat.addModelMessage(response);
+      _setStatus(ok ? AssistantStatus.idle : AssistantStatus.error, response);
+      if (speakAnswer) { await _configureTts(); await ref.read(ttsServiceProvider).speak(response); }
+      return;
+    }
+
+    // 2) Native accessibility commands operate on the currently visible app.
+    if (await _handleAccessibilityCommand(text)) return;
+
+    // 3) Device commands (offline, rule-based).
     final action = CommandParser.parse(text);
     if (action != null) {
       _chat.addUserMessage(text);
@@ -80,6 +97,73 @@ class AssistantNotifier extends Notifier<AssistantState> {
     _chat.addUserMessage(text);
     _chat.ensureActiveConversation(text);
     await _askGemini(text, speakAnswer: speakAnswer);
+  }
+
+
+  Future<bool> _handleAccessibilityCommand(String raw) async {
+    final text = raw.trim();
+    final lower = text.toLowerCase().replaceAll(RegExp(r'[।,.!?]+$'), '').trim();
+    final bridge = ref.read(androidBridgeProvider);
+    String action = '';
+    String? target;
+    String? value;
+
+    bool hasAny(List<String> words) => words.any(lower.contains);
+
+    // Bengali-first commands. Accept natural variations, not only exact English.
+    if (hasAny(['অ্যাসিস্ট্যান্ট বন্ধ', 'সহকারী বন্ধ', 'ভয়েস বন্ধ', 'ভয়েস বন্ধ', 'শুনা বন্ধ', 'শোনা বন্ধ'])) {
+      await stopLive();
+      await stopListening();
+      await ref.read(speechServiceProvider).stop();
+      state = state.copyWith(listeningMode: false);
+      _setStatus(AssistantStatus.idle, 'অ্যাসিস্ট্যান্ট বন্ধ হয়েছে।');
+      return true;
+    }
+    if (hasAny(['আগের পেজে যাও', 'পিছনে যাও', 'পেছনে যাও', 'এক ধাপ পিছনে', 'ব্যাক করো', 'ব্যাক যাও']) ||
+        RegExp(r'^(go )?back$|^পিছনে যাও$', caseSensitive: false).hasMatch(lower)) action = 'back';
+    else if (hasAny(['হোমে যাও', 'হোম স্ক্রিনে যাও', 'মূল পর্দায় যাও', 'মূল পর্দায় যাও']) || lower == 'home') action = 'home';
+    else if (hasAny(['নিচে স্ক্রল', 'নিচে নামাও', 'আরও নিচে', 'নিচের দিকে যাও']) || lower == 'scroll down') action = 'scroll_down';
+    else if (hasAny(['উপরে স্ক্রল', 'উপরে উঠাও', 'উপরে যাও', 'উপরের দিকে যাও']) || lower == 'scroll up') action = 'scroll_up';
+    else if (hasAny(['নোটিফিকেশন দেখাও', 'নোটিফিকেশন খোলো', 'বিজ্ঞপ্তি দেখাও'])) action = 'notifications';
+    else {
+      final click = RegExp(r'^(?:click|tap)\s+(.+)$', caseSensitive: false).firstMatch(text)
+          ?? RegExp(r'^(?:চাপ দাও|ক্লিক করো|বাটনে চাপ দাও)\s*(.*)$').firstMatch(text);
+      if (click != null) {
+        action = 'click_text';
+        target = click.group(1)?.trim();
+      } else if (hasAny(['লাইক দাও', 'লাইক বাটনে চাপ দাও', 'লাইক করো'])) {
+        action = 'click_text'; target = 'Like';
+      } else if (hasAny(['কমেন্টে চাপ দাও', 'কমেন্ট করো'])) {
+        action = 'click_text'; target = 'Comment';
+      } else {
+        final type = RegExp(r'^(?:type|write|লিখো|লিখে দাও|টাইপ করো)\s+(.+)$', caseSensitive: false).firstMatch(text);
+        final sayType = RegExp(r'^(.+?)\s+লিখে দাও$').firstMatch(text);
+        if (type != null) {
+          action = 'type_text'; value = type.group(1)?.trim();
+        } else if (sayType != null) {
+          action = 'type_text'; value = sayType.group(1)?.trim();
+        }
+      }
+    }
+    if (action.isEmpty) return false;
+    try {
+      final result = await bridge.accessibilityAction(action, target: target, value: value);
+      final ok = result == true;
+      _chat.addUserMessage(text);
+      final response = ok
+          ? 'কাজটি সম্পন্ন করেছি।'
+          : 'এই স্ক্রিনে কাজটি করা যায়নি। Accessibility চালু আছে কি না এবং বাটন বা লেখার ঘরটি দৃশ্যমান কি না পরীক্ষা করুন।';
+      _chat.addModelMessage(response);
+      _setStatus(ok ? AssistantStatus.speaking : AssistantStatus.error, response);
+      if (ok) {
+        await _configureTts();
+        await ref.read(ttsServiceProvider).speak(response);
+        _setStatus(AssistantStatus.idle, 'প্রস্তুত');
+      }
+    } catch (_) {
+      _setStatus(AssistantStatus.error, 'ফোনের Accessibility অনুমতি চালু করুন।');
+    }
+    return true;
   }
 
   Future<void> _askGemini(String prompt, {required bool speakAnswer}) async {

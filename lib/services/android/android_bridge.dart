@@ -14,6 +14,32 @@ class AndroidBridge {
     }
   }
 
+  Future<bool> hasAccessibilityEnabled() async {
+    try {
+      return await _channel.invokeMethod<bool>('hasAccessibilityEnabled') ?? false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  Future<bool> openAccessibilitySettings() async {
+    try {
+      return await _channel.invokeMethod<bool>('openAccessibilitySettings') ?? false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  /// Visible UI interaction through the user-enabled Android Accessibility Service.
+  Future<dynamic> accessibilityAction(String action,
+      {String? target, String? value}) async {
+    return _channel.invokeMethod('accessibilityAction', {
+      'action': action,
+      if (target != null) 'target': target,
+      if (value != null) 'value': value,
+    });
+  }
+
   Future<void> requestOverlayPermission() =>
       _channel.invokeMethod('requestOverlayPermission');
 
@@ -54,6 +80,15 @@ class AndroidBridge {
       return await _channel.invokeMethod<bool>(
               'isAppInstalled', {'packageName': packageName}) ??
           false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  /// Opens the system web-search intent with the supplied query.
+  Future<bool> searchWeb(String query) async {
+    try {
+      return await _channel.invokeMethod<bool>('searchWeb', {'query': query}) ?? false;
     } on PlatformException {
       return false;
     }
