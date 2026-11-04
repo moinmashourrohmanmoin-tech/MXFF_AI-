@@ -91,7 +91,7 @@ class AssistantNotifier extends Notifier<AssistantState> {
     // 3) Unknown request: Gemini only if the fallback switch is on.
     if (!kUseGeminiFallback) {
       const msg =
-          'এটা এখন আমি নিজে করতে পারি না। আমি পারি: সময় ও তারিখ বলা, হিসাব, আপনার নাম মনে রাখা, নোট রাখা, টাইমার, আর অ্যাপ খোলা।';
+          'এটা আমি এখনো জানি না। আমাকে শেখাতে চাইলে লিখুন: শিখো: প্রশ্ন = উত্তর। আমি পারি সময়, তারিখ, হিসাব, নাম, নোট, টাইমার আর অ্যাপ খোলা।';
       _chat.addModelMessage(msg);
       await _speakLocal(msg, speakAnswer);
       return;

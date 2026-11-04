@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'web_research.dart';
+
 /// A reply produced entirely on the phone (no AI service needed).
 class LocalReply {
   const LocalReply(this.text, {this.timerSeconds});
@@ -14,6 +16,7 @@ class LocalReply {
 class LocalBrain {
   static const _nameKey = 'mxff_local_name';
   static const _notesKey = 'mxff_local_notes';
+  static const _taughtKey = 'mxff_taught';
 
   static const _weekdays = [
     'সোমবার', 'মঙ্গলবার', 'বুধবার', 'বৃহস্পতিবার', 'শুক্রবার', 'শনিবার', 'রবিবার',
@@ -37,6 +40,31 @@ class LocalBrain {
         t.contains('what can you do')) {
       return const LocalReply(
           'আমি সময় ও তারিখ বলতে পারি, হিসাব করতে পারি, আপনার নাম মনে রাখতে পারি, নোট রাখতে পারি, টাইমার দিতে পারি, আর অ্যাপ খুলতে পারি।');
+    }
+
+    // Teach MXFF AI something: "শিখো: প্রশ্ন = উত্তর"
+    final teach =
+        RegExp(r'^(?:শিখো|শেখাও|teach)\s*[:]?\s*(.+?)\s*=\s*(.+)$').firstMatch(t);
+    if (teach != null) {
+      final q = teach.group(1)!.trim();
+      final a = teach.group(2)!.trim();
+      final items = await _getTaught();
+      items.removeWhere((e) => e['q'] == q);
+      items.add({'q': q, 'a': a});
+      await _saveTaught(items);
+      return LocalReply('ঠিক আছে, শিখে নিলাম। "$q" জিজ্ঞেস করলে বলব: $a');
+    }
+    // Forget: "ভুলে যাও প্রশ্ন"
+    final forget = RegExp(r'^(?:ভুলে যাও|forget)\s+(.+)$').firstMatch(t);
+    if (forget != null) {
+      final q = forget.group(1)!.trim();
+      final items = await _getTaught();
+      final before = items.length;
+      items.removeWhere((e) => e['q'] == q);
+      await _saveTaught(items);
+      return LocalReply(items.length < before
+          ? '"$q" ভুলে গেলাম।'
+          : 'এমন কিছু আমার শেখা নেই।');
     }
 
     // Time and date
@@ -156,10 +184,54 @@ class LocalBrain {
       return LocalReply('উত্তর $shown।');
     }
 
+    // Things MXFF AI was taught earlier
+    final learned = await _bestTaught(t);
+    if (learned != null) return LocalReply(learned);
+
+    // Factual questions: look them up in Wikipedia (no AI involved).
+    final web = await WebResearch.answer(t);
+    if (web != null) return LocalReply(web);
+
     return null;
   }
 
   // ---------------------------------------------------------------
+  Future<String?> _bestTaught(String t) async {
+    final words = t.split(' ').where((w) => w.length > 1).toSet();
+    if (words.isEmpty) return null;
+    String? best;
+    double bestScore = 0;
+    for (final e in await _getTaught()) {
+      final qWords =
+          (e['q'] ?? '').split(' ').where((w) => w.length > 1).toSet();
+      if (qWords.isEmpty) continue;
+      final score = words.intersection(qWords).length / qWords.length;
+      if (score >= 0.6 && score > bestScore) {
+        bestScore = score;
+        best = e['a'];
+      }
+    }
+    return best;
+  }
+
+  Future<List<Map<String, String>>> _getTaught() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_taughtKey);
+    if (raw == null || raw.isEmpty) return <Map<String, String>>[];
+    try {
+      return (jsonDecode(raw) as List)
+          .map((e) => Map<String, String>.from(e as Map))
+          .toList();
+    } catch (_) {
+      return <Map<String, String>>[];
+    }
+  }
+
+  Future<void> _saveTaught(List<Map<String, String>> items) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_taughtKey, jsonEncode(items));
+  }
+
   String _normalize(String raw) {
     const bn = '০১২৩৪৫৬৭৮৯';
     var s = raw.toLowerCase().trim();

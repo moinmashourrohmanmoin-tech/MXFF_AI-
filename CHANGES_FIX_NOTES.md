@@ -63,3 +63,10 @@ Speech-to-text path is kept, and can be used by setting kUseGeminiLive = false.
 - lib/core/local_brain.dart: time, date, calculator, name memory, notes, timer, greetings, "what can you do".
 - Requests the local brain cannot answer get a clear Bengali message. Gemini is used only if kUseGeminiFallback = true.
 - Voice base from the working fix (speech_to_text path) kept.
+
+## v13 - MXFF AI teaches itself
+- "শিখো: প্রশ্ন = উত্তর" stores an answer in the phone. Later, a similar question gets that answer.
+- "ভুলে যাও প্রশ্ন" removes it.
+
+## v14 - Wikipedia lookup for factual questions
+- lib/core/web_research.dart: question -> Wikipedia search (Bengali, then English) -> opening paragraph. No AI model is involved.
