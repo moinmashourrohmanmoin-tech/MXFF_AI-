@@ -37,6 +37,9 @@ class LocalBrain {
     }
     if (t.contains('তুমি কী পারো') ||
         t.contains('তুমি কি পারো') ||
+        (t.contains('তুমি') && t.contains('পারো')) ||
+        t.contains('তুমি কী কী') ||
+        t.contains('তুমি কি কি') ||
         t.contains('what can you do')) {
       return const LocalReply(
           'আমি সময় ও তারিখ বলতে পারি, হিসাব করতে পারি, আপনার নাম মনে রাখতে পারি, নোট রাখতে পারি, টাইমার দিতে পারি, আর অ্যাপ খুলতে পারি।');

@@ -28,6 +28,15 @@ class WebResearch {
         if (title == null) continue;
         final extract = await _extract(lang, title);
         if (extract == null || extract.isEmpty) continue;
+        // Only accept an article that actually mentions the topic words.
+        // Otherwise the search picked an unrelated page.
+        final words = topic
+            .toLowerCase()
+            .split(' ')
+            .where((w) => w.length >= 3)
+            .toList();
+        final haystack = '${title.toLowerCase()} ${extract.toLowerCase()}';
+        if (words.isEmpty || !words.any(haystack.contains)) continue;
         final text = extract.replaceAll(RegExp(r'\s+'), ' ').trim();
         final short = text.length > 350 ? '${text.substring(0, 350)}…' : text;
         return 'উইকিপিডিয়া থেকে ($title): $short';

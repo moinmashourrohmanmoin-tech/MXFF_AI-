@@ -70,3 +70,7 @@ Speech-to-text path is kept, and can be used by setting kUseGeminiLive = false.
 
 ## v14 - Wikipedia lookup for factual questions
 - lib/core/web_research.dart: question -> Wikipedia search (Bengali, then English) -> opening paragraph. No AI model is involved.
+
+## v15 - answer accuracy
+- Wikipedia answers are only used when the article mentions the question's words. Otherwise MXFF AI says it does not know.
+- "তুমি কি কি করে পারো" and similar questions now get MXFF AI's own capability answer.
